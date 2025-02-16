@@ -3,78 +3,825 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Ассистент</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>Иерархический распознаватель команд</title>
     <style>
-        /* ... существующие стили ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+            height: 95vh;
+        }
+
+        .control-panel {
+            background-color: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .recognizers-container {
+            display: flex;
+            gap: 15px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .speech-container {
+            flex: 1;
+            background-color: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            min-width: 280px;
+            overflow: hidden;
+        }
+
+        .commands-panel {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .commands-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .commands-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 100px;
+        }
+
+        .command-group {
+            margin: 5px 0;
+            border-left: 2px solid #3498db;
+            padding-left: 10px;
+        }
+
+        .command-group.collapsed .group-content {
+            display: none;
+        }
+
+        .command-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin: 5px 0;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .command-item.dragging {
+            opacity: 0.5;
+            background: #e3f2fd;
+        }
+
+        .command-item.drag-over {
+            border: 2px dashed #3498db;
+        }
+
+        .drop-zone {
+            height: 10px;
+            margin: 2px 0;
+            transition: height 0.2s;
+        }
+
+        .drop-zone.active {
+            height: 20px;
+            background: rgba(52, 152, 219, 0.2);
+            border: 2px dashed #3498db;
+            border-radius: 4px;
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            background: #f1f1f1;
+            margin-bottom: 5px;
+        }
+
+        .group-header:hover {
+            background: #e9e9e9;
+        }
+
+        .group-header.drag-over {
+            border: 2px dashed #3498db;
+        }
+
+        .group-toggle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+        }
+
+        .command-text {
+            flex: 1;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .command-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .command-actions button {
+            padding: 5px 10px;
+            min-width: auto;
+            font-size: 12px;
+        }
+
+        .edit-input {
+            flex: 1;
+            padding: 5px;
+            border: 1px solid #3498db;
+            border-radius: 4px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .action-types {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .action-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .action-item input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 0;
+        }
+
+        .command-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #e1f5fe;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .modal-footer {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        h2 {
+            color: #2c3e50;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            font-size: 16px;
+            resize: vertical;
+            transition: all 0.3s ease;
+            font-family: Arial, sans-serif;
+            line-height: 1.5;
+            flex-grow: 1;
+            min-height: 100px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.1);
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        button {
+            padding: 8px 15px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            min-width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            background-color: #3498db;
+            color: white;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .toggle {
+            background-color: #3498db;
+            font-size: 16px;
+            padding: 12px 25px;
+        }
+
+        .toggle.active {
+            background-color: #e74c3c;
+        }
+
+        .clear {
+            background-color: #95a5a6;
+        }
+
+        .clear:hover {
+            background-color: #7f8c8d;
+        }
+
+        .add-group {
+            background-color: #2ecc71;
+        }
+
+        .add-group:hover {
+            background-color: #27ae60;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            color: #7f8c8d;
+            min-height: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .recognizers-container {
+                flex-direction: column;
+            }
+
+            .speech-container {
+                min-height: 400px;
+            }
+
+            textarea {
+                height: 150px;
+            }
+
+            .modal-content {
+                margin: 10px;
+                width: calc(100% - 20px);
+                padding: 15px;
+            }
+
+            .commands-panel {
+                flex-direction: column;
+            }
+
+            .commands-panel input {
+                width: 100%;
+            }
+
+            .command-item {
+                flex-wrap: wrap;
+            }
+
+            .command-actions {
+                width: 100%;
+                margin-top: 5px;
+                justify-content: flex-end;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="main-container">
-        <!-- Левая часть - Распознавание речи -->
-        <div class="speech-container">
-            <h1>Распознавание речи</h1>
-            <textarea id="output" placeholder="Здесь появится распознанный текст..."></textarea>
-            <div class="buttons">
-                <button class="toggle" onclick="toggleRecognition()">🎤 Старт</button>
-                <button class="clear" onclick="clearText()">🗑️ Очистить</button>
-                <button class="send-button" onclick="sendToAI()">📤 Отправить</button>
-            </div>
-            <div class="status" id="status"></div>
+        <div class="control-panel">
+            <button class="toggle" onclick="toggleRecognition()">🎤 Старт</button>
+            <button class="clear" onclick="clearBoth()">🗑️ Очистить оба</button>
         </div>
-
-        <!-- Правая часть - AI ответы -->
-        <div class="ai-container">
-            <h1>AI Ассистент</h1>
-            <div class="settings-panel">
-                <div class="api-status">
-                    <span class="status-dot"></span>
-                    <span class="status-text">Статус API: проверка...</span>
+        
+        <div class="recognizers-container">
+            <div class="speech-container">
+                <h1>Анализатор команд</h1>
+                <div class="commands-panel">
+                    <input type="text" id="newCommand" placeholder="Введите новую команду..."
+                           onkeypress="if(event.key === 'Enter') addCommand()">
+                    <div class="commands-actions">
+                        <button onclick="addCommand()">➕ Добавить команду</button>
+                        <button class="add-group" onclick="addGroup()">📁 Новая группа</button>
+                    </div>
                 </div>
-                <select id="ai-model" onchange="changeModel()">
-                    <option value="gigachat">GigaChat (Сбер)</option>
-                    <option value="openassistant">OpenAssistant (Бесплатно)</option>
-                    <option value="yandexgpt">Yandex GPT</option>
-                    <option value="gpt4all">GPT4All (Локально)</option>
-                    <option value="claude">Claude-2</option>
-                </select>
-                <div class="api-key-input" style="display: none;">
-                    <input type="password" id="custom-api-key" placeholder="Введите API ключ">
-                    <button onclick="saveApiKey()">Сохранить ключ</button>
+                <div class="commands-list" id="commandsList">
+                    <!-- Команды будут добавляться сюда -->
                 </div>
+                <textarea id="output1" placeholder="Здесь появятся распознанные команды..." readonly></textarea>
+                <div class="status" id="status1"></div>
             </div>
-            <div class="chat-container" id="chat"></div>
-            <div class="buttons">
-                <button class="clear" onclick="clearHistory()">🗑️ Очистить историю</button>
+
+            <div class="speech-container">
+                <h1>Распознаватель (синхронный)</h1>
+                <textarea id="output2" placeholder="Здесь появится распознанный текст..." readonly></textarea>
+                <div class="status" id="status2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для действий -->
+    <div id="actionModal" class="modal">
+        <div class="modal-content">
+            <h2>Действия для команды: <span id="currentCommandText"></span></h2>
+            <div class="action-types">
+                <button onclick="addAction('url')">🌐 Открыть ссылку</button>
+            </div>
+            <div id="actionsList"></div>
+            <div class="modal-footer">
+                <button onclick="closeActionModal()">Закрыть</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Инициализация переменных для распознавания речи
         let recognition = null;
         let isRecognizing = false;
-        
-        // API ключи
-        const API_KEYS = {
-            gigachat: localStorage.getItem('gigachat_key') || '',
-            yandexgpt: localStorage.getItem('yandex_key') || '',
-            claude: localStorage.getItem('claude_key') || '',
-            openassistant: 'public-free'
-        };
+        let finalTranscript = '';
+        let currentSession = '';
+        let isEditing = false;
+        let draggedItem = null;
 
-        const API_ENDPOINTS = {
-            gigachat: '/api/chat',  // Изменено на локальный endpoint
-            yandexgpt: 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
-            claude: 'https://api.anthropic.com/v1/messages',
-            openassistant: 'https://api.openassistant.xyz/v1/chat',
-            gpt4all: 'http://localhost:4891/v1/chat/completions'
-        };
+        // Структура для хранения команд и групп
+        class CommandNode {
+            constructor(text, type = 'command', parentId = null) {
+                this.id = Date.now() + Math.random().toString(36).substr(2, 9);
+                this.text = text;
+                this.type = type; // 'command' или 'group'
+                this.parentId = parentId;
+                this.actions = [];
+                this.children = []; // для групп
+                this.isCollapsed = false; // для групп
+            }
+        }
 
-        let currentModel = 'gigachat';  // Изменено на gigachat по умолчанию
-        let dialogHistory = [];
+        let commandsTree = [];
 
-        // Инициализация распознавания речи
+        function findNodeById(nodes, id) {
+            for (let node of nodes) {
+                if (node.id === id) return node;
+                if (node.type === 'group') {
+                    const found = findNodeById(node.children, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        function findParentNode(nodes, childId) {
+            for (let node of nodes) {
+                if (node.type === 'group') {
+                    if (node.children.some(child => child.id === childId)) {
+                        return node;
+                    }
+                    const found = findParentNode(node.children, childId);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        function removeNodeFromParent(nodes, nodeId) {
+            const parent = findParentNode(nodes, nodeId);
+            if (parent) {
+                parent.children = parent.children.filter(node => node.id !== nodeId);
+                return true;
+            }
+            return false;
+        }
+
+        function deleteNode(nodeId) {
+            const node = findNodeById(commandsTree, nodeId);
+            if (!node) return;
+
+            if (!removeNodeFromParent(commandsTree, nodeId)) {
+                commandsTree = commandsTree.filter(node => node.id !== nodeId);
+            }
+            updateCommandsList();
+        }
+
+        function addCommand(parentId = null) {
+            const input = document.getElementById('newCommand');
+            const commandText = input.value.trim().toLowerCase();
+            
+            if (commandText) {
+                const newCommand = new CommandNode(commandText, 'command', parentId);
+                if (parentId) {
+                    const parent = findNodeById(commandsTree, parentId);
+                    if (parent && parent.type === 'group') {
+                        parent.children.push(newCommand);
+                    }
+                } else {
+                    commandsTree.push(newCommand);
+                }
+                updateCommandsList();
+                input.value = '';
+            }
+        }
+
+        function addGroup(parentId = null) {
+            const groupName = prompt('Введите название группы:');
+            if (groupName) {
+                const newGroup = new CommandNode(groupName, 'group', parentId);
+                if (parentId) {
+                    const parent = findNodeById(commandsTree, parentId);
+                    if (parent && parent.type === 'group') {
+                        parent.children.push(newGroup);
+                    }
+                } else {
+                    commandsTree.push(newGroup);
+                }
+                updateCommandsList();
+            }
+        }
+
+        function toggleGroup(groupId) {
+            const group = findNodeById(commandsTree, groupId);
+            if (group) {
+                group.isCollapsed = !group.isCollapsed;
+                updateCommandsList();
+            }
+        }
+
+        function editCommand(nodeId) {
+            const node = findNodeById(commandsTree, nodeId);
+            if (!node) return;
+
+            const commandItem = document.querySelector(`[data-id="${nodeId}"]`);
+            if (!commandItem) return;
+
+            const textSpan = commandItem.querySelector('.command-text');
+            const currentText = node.text;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'edit-input';
+            input.value = currentText;
+
+            const saveEdit = () => {
+                const newText = input.value.trim().toLowerCase();
+                if (newText && newText !== currentText) {
+                    node.text = newText;
+                }
+                updateCommandsList();
+            };
+
+            input.onblur = saveEdit;
+            input.onkeypress = (e) => {
+                if (e.key === 'Enter') {
+                    saveEdit();
+                }
+            };
+
+            textSpan.innerHTML = '';
+            textSpan.appendChild(input);
+            input.focus();
+        }
+
+        function renderCommandNode(node, level = 0) {
+            const padding = level * 20;
+            let html = '';
+
+            if (node.type === 'group') {
+                html += `
+                    <div class="command-group" data-id="${node.id}" style="margin-left: ${padding}px">
+                        <div class="group-header" ondragover="handleDragOver(event)" ondrop="handleDrop(event)" data-id="${node.id}">
+                            <button class="group-toggle" onclick="event.stopPropagation(); toggleGroup('${node.id}')">${node.isCollapsed ? '▶' : '▼'}</button>
+                            <span class="command-text">📁 ${node.text}</span>
+                            <div class="command-actions">
+                                <button onclick="event.stopPropagation(); addCommand('${node.id}')" title="Добавить команду">➕</button>
+                                <button onclick="event.stopPropagation(); addGroup('${node.id}')" title="Добавить группу">📁</button>
+                                <button onclick="event.stopPropagation(); deleteNode('${node.id}')" title="Удалить группу">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="group-content" ${node.isCollapsed ? 'style="display:none"' : ''}>
+                            ${node.children.map(child => renderCommandNode(child, level + 1)).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                const actionsCount = node.actions.length;
+                const actionsBadge = actionsCount > 0 ? 
+                    `<span class="command-badge">🔗 ${actionsCount}</span>` : '';
+
+                html += `
+                    <div class="command-item" draggable="true" 
+                         ondragstart="handleDragStart(event)" 
+                         ondragend="handleDragEnd(event)"
+                         ondragover="handleDragOver(event)"
+                         ondrop="handleDrop(event)"
+                         data-id="${node.id}"
+                         style="margin-left: ${padding}px">
+                        <span class="command-text">${node.text}${actionsBadge}</span>
+                        <div class="command-actions">
+                            <button onclick="openActionModal('${node.id}')" title="Действия">🔗</button>
+                            <button onclick="editCommand('${node.id}')" title="Редактировать">✏️</button>
+                            <button onclick="deleteNode('${node.id}')" title="Удалить">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Добавляем зону для дропа после каждого элемента
+            html += `<div class="drop-zone" ondragover="handleDragOver(event)" ondrop="handleDrop(event)" data-level="${level}"></div>`;
+
+            return html;
+        }
+
+        function updateCommandsList() {
+            const list = document.getElementById('commandsList');
+            // Добавляем начальную зону для дропа
+            list.innerHTML = `<div class="drop-zone" ondragover="handleDragOver(event)" ondrop="handleDrop(event)" data-level="0"></div>` +
+                commandsTree.map(node => renderCommandNode(node)).join('');
+        }
+
+        // Drag and Drop handlers
+        function handleDragStart(event) {
+            draggedItem = event.target;
+            event.target.classList.add('dragging');
+            
+            // Для мобильных устройств
+            event.target.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (target) {
+                    const dropTarget = target.closest('.command-item, .group-header, .drop-zone');
+                    if (dropTarget) {
+                        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                        dropTarget.classList.add('drag-over');
+                    }
+                }
+            });
+        }
+
+        function handleDragEnd(event) {
+            event.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            document.querySelectorAll('.drop-zone.active').forEach(el => el.classList.remove('active'));
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            const target = event.target.closest('.command-item, .group-header, .drop-zone');
+            
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            document.querySelectorAll('.drop-zone.active').forEach(el => el.classList.remove('active'));
+            
+            if (target) {
+                if (target.classList.contains('drop-zone')) {
+                    target.classList.add('active');
+                } else {
+                    target.classList.add('drag-over');
+                }
+            }
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const target = event.target.closest('.command-item, .group-header, .drop-zone');
+            
+            if (target && draggedItem) {
+                const draggedId = draggedItem.dataset.id;
+                const draggedNode = findNodeById(commandsTree, draggedId);
+                
+                if (!draggedNode) return;
+
+                // Удаляем узел из текущего места
+                if (!removeNodeFromParent(commandsTree, draggedId)) {
+                    commandsTree = commandsTree.filter(node => node.id !== draggedId);
+                }
+
+                if (target.classList.contains('drop-zone')) {
+                    // Вставляем на верхний уровень или в конец группы
+                    const level = parseInt(target.dataset.level) || 0;
+                    if (level === 0) {
+                        commandsTree.push(draggedNode);
+                    } else {
+                        const parentGroup = findParentNode(commandsTree, target.previousElementSibling.dataset.id);
+                        if (parentGroup) {
+                            parentGroup.children.push(draggedNode);
+                        }
+                    }
+                } else {
+                    const targetId = target.dataset.id;
+                    const targetNode = findNodeById(commandsTree, targetId);
+                    
+                    if (targetNode.type === 'group') {
+                        // Добавляем в начало группы
+                        targetNode.children.unshift(draggedNode);
+                    } else {
+                        // Добавляем после целевого элемента
+                        const targetParent = findParentNode(commandsTree, targetId);
+                        if (targetParent) {
+                            const index = targetParent.children.findIndex(n => n.id === targetId);
+                            targetParent.children.splice(index + 1, 0, draggedNode);
+                        } else {
+                            const index = commandsTree.findIndex(n => n.id === targetId);
+                            commandsTree.splice(index + 1, 0, draggedNode);
+                        }
+                    }
+                }
+                
+                updateCommandsList();
+            }
+            
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            document.querySelectorAll('.drop-zone.active').forEach(el => el.classList.remove('active'));
+        }
+
+        // Функции для работы с действиями
+        function openActionModal(commandId) {
+            const command = findNodeById(commandsTree, commandId);
+            if (command) {
+                const modal = document.getElementById('actionModal');
+                const commandSpan = document.getElementById('currentCommandText');
+                commandSpan.textContent = command.text;
+                modal.dataset.commandId = commandId;
+                modal.style.display = 'block';
+                updateActionsList(commandId);
+            }
+        }
+
+        function closeActionModal() {
+            document.getElementById('actionModal').style.display = 'none';
+        }
+
+        function addAction(type) {
+            const modal = document.getElementById('actionModal');
+            const commandId = modal.dataset.commandId;
+            const command = findNodeById(commandsTree, commandId);
+            
+            if (command) {
+                command.actions.push({
+                    type: type,
+                    path: '',
+                    id: Date.now()
+                });
+                updateActionsList(commandId);
+            }
+        }
+
+        function updateActionsList(commandId) {
+            const command = findNodeById(commandsTree, commandId);
+            const actionsList = document.getElementById('actionsList');
+            
+            if (!command) return;
+            
+            actionsList.innerHTML = '';
+            command.actions.forEach(action => {
+                const actionItem = document.createElement('div');
+                actionItem.className = 'action-item';
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = action.path;
+                input.placeholder = 'Введите URL (например: https://www.google.com)';
+                
+                input.onchange = (e) => {
+                    action.path = e.target.value;
+                };
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '🗑️';
+                deleteBtn.onclick = () => {
+                    command.actions = command.actions.filter(a => a.id !== action.id);
+                    updateActionsList(commandId);
+                };
+                
+                actionItem.appendChild(document.createTextNode('🌐 '));
+                actionItem.appendChild(input);
+                actionItem.appendChild(deleteBtn);
+                actionsList.appendChild(actionItem);
+            });
+        }
+
+        function executeActions(commandId) {
+            const command = findNodeById(commandsTree, commandId);
+            if (command && command.actions.length > 0) {
+                command.actions.forEach(action => {
+                    if (action.path) {
+                        if (action.type === 'url') {
+                            window.open(action.path, '_blank');
+                        }
+                    }
+                });
+            }
+        }
+
+        // Speech Recognition
         function initRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
                 alert('Ваш браузер не поддерживает распознавание речи. Используйте Chrome.');
@@ -87,397 +834,138 @@
             recognition.lang = 'ru-RU';
             
             recognition.onstart = () => {
-                updateStatus('Распознавание запущено. Говорите...');
+                updateStatus('Говорите...');
                 const toggleBtn = document.querySelector('.toggle');
-                toggleBtn.textContent = '🎤 Стоп';
+                toggleBtn.textContent = '🛑 Стоп';
                 toggleBtn.classList.add('active');
                 isRecognizing = true;
             };
             
             recognition.onend = () => {
-                updateStatus('Распознавание остановлено');
-                const toggleBtn = document.querySelector('.toggle');
-                toggleBtn.textContent = '🎤 Старт';
-                toggleBtn.classList.remove('active');
-                isRecognizing = false;
+                if (isRecognizing) {
+                    recognition.start();
+                } else {
+                    updateStatus('Распознавание остановлено');
+                    const toggleBtn = document.querySelector('.toggle');
+                    toggleBtn.textContent = '🎤 Старт';
+                    toggleBtn.classList.remove('active');
+                }
             };
             
             recognition.onerror = (event) => {
+                console.error('Recognition error:', event.error);
                 updateStatus('Ошибка: ' + event.error);
-                isRecognizing = false;
-                const toggleBtn = document.querySelector('.toggle');
-                toggleBtn.textContent = '🎤 Старт';
-                toggleBtn.classList.remove('active');
             };
             
             recognition.onresult = (event) => {
-                let finalTranscript = '';
                 let interimTranscript = '';
                 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
+                    const transcript = event.results[i][0].transcript.toLowerCase();
+                    
                     if (event.results[i].isFinal) {
                         finalTranscript += transcript;
+                        currentSession = '';
+                        
+                        // Проверяем все команды, включая вложенные
+                        function checkCommands(nodes) {
+                            nodes.forEach(node => {
+                                if (node.type === 'command' && transcript.includes(node.text)) {
+                                    const output1 = document.getElementById('output1');
+                                    const timestamp = new Date().toLocaleTimeString();
+                                    output1.value += `[${timestamp}] Распознана команда: ${node.text}\n`;
+                                    output1.scrollTop = output1.scrollHeight;
+                                    
+                                    executeActions(node.id);
+                                }
+                                if (node.type === 'group' && !node.isCollapsed) {
+                                    checkCommands(node.children);
+                                }
+                            });
+                        }
+                        
+                        checkCommands(commandsTree);
                     } else {
-                        interimTranscript += transcript;
+                        interimTranscript = transcript;
                     }
                 }
                 
-                const output = document.getElementById('output');
-                output.value = finalTranscript || interimTranscript;
+                document.getElementById('output2').value = finalTranscript + ' ' + interimTranscript;
+                const output2 = document.getElementById('output2');
+                 output2.scrollTop = output2.scrollHeight;
             };
+
+            return recognition;
         }
 
-        // Функция переключения распознавания
         function toggleRecognition() {
-            if (!recognition) initRecognition();
+            if (!recognition) {
+                initRecognition();
+            }
+            
             if (!recognition) return;
             
             if (!isRecognizing) {
-                recognition.start();
-            } else {
-                recognition.stop();
-                updateStatus('Распознавание остановлено');
-            }
-        }
-
-        // Функция изменения модели
-        function changeModel() {
-            currentModel = document.getElementById('ai-model').value;
-            const apiKeyInput = document.querySelector('.api-key-input');
-            
-            if (['yandexgpt', 'claude'].includes(currentModel)) {
-                apiKeyInput.style.display = 'block';
-            } else {
-                apiKeyInput.style.display = 'none';
-            }
-            
-            if (currentModel === 'gpt4all') {
-                checkGPT4AllServer();
-            }
-
-            updateApiStatus();
-        }
-
-        // Проверка статуса API
-        async function updateApiStatus() {
-            const statusDot = document.querySelector('.status-dot');
-            const statusText = document.querySelector('.status-text');
-            
-            try {
-                if (currentModel === 'gigachat' || currentModel === 'openassistant') {
-                    statusDot.className = 'status-dot active';
-                    statusText.textContent = 'Статус API: Доступен';
-                    return;
+                try {
+                    finalTranscript = '';
+                    currentSession = '';
+                    document.getElementById('output2').value = '';
+                    recognition.start();
+                } catch (e) {
+                    console.error('Start error:', e);
+                    updateStatus('Ошибка запуска');
                 }
-
-                const hasKey = API_KEYS[currentModel] && API_KEYS[currentModel].length > 0;
-                if (!hasKey) {
-                    statusDot.className = 'status-dot error';
-                    statusText.textContent = 'Статус API: Требуется ключ';
-                    return;
-                }
-
-                const isValid = await validateApiKey(currentModel, API_KEYS[currentModel]);
-                statusDot.className = `status-dot ${isValid ? 'active' : 'error'}`;
-                statusText.textContent = `Статус API: ${isValid ? 'Доступен' : 'Ошибка'}`;
-            } catch (error) {
-                statusDot.className = 'status-dot error';
-                statusText.textContent = 'Статус API: Ошибка подключения';
-            }
-        }
-
-        // Валидация API ключей
-        async function validateApiKey(model, key) {
-            try {
-                let isValid = false;
-                switch(model) {
-                    case 'yandexgpt':
-                        const yandexResponse = await fetch(API_ENDPOINTS.yandexgpt, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Api-Key ${key}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                modelUri: "gpt://yandexgpt-lite",
-                                completionOptions: {
-                                    stream: false,
-                                    temperature: 0.6,
-                                    maxTokens: "1"
-                                },
-                                messages: [{ role: "user", text: "test" }]
-                            })
-                        });
-                        isValid = yandexResponse.ok;
-                        break;
-
-                    case 'claude':
-                        const claudeResponse = await fetch(API_ENDPOINTS.claude, {
-                            method: 'POST',
-                            headers: {
-                                'x-api-key': key,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                messages: [{ role: "user", content: "test" }],
-                                model: "claude-2",
-                                max_tokens: 1
-                            })
-                        });
-                        isValid = claudeResponse.ok;
-                        break;
-                }
-                return isValid;
-            } catch (error) {
-                console.error('Ошибка валидации ключа:', error);
-                return false;
-            }
-        }
-
-        // Сохранение API ключа
-        async function saveApiKey() {
-            const key = document.getElementById('custom-api-key').value;
-            if (!key) {
-                alert('Введите API ключ');
-                return;
-            }
-
-            const isValid = await validateApiKey(currentModel, key);
-            if (isValid) {
-                localStorage.setItem(`${currentModel}_key`, key);
-                API_KEYS[currentModel] = key;
-                alert('API ключ успешно сохранен и проверен!');
-                updateApiStatus();
             } else {
-                alert('Неверный API ключ или ошибка проверки');
+                try {
+                    isRecognizing = false;
+                    recognition.stop();
+                } catch (e) {
+                    console.error('Stop error:', e);
+                    updateStatus('Ошибка остановки');
+                }
             }
         }
 
-        // Проверка локального сервера GPT4All
-        async function checkGPT4AllServer() {
-            try {
-                const response = await fetch('http://localhost:4891/health');
-                if (!response.ok) throw new Error('GPT4All сервер недоступен');
-                updateStatus('GPT4All сервер доступен');
-            } catch (error) {
-                updateStatus('Ошибка: GPT4All сервер не запущен. Запустите локальный сервер.');
-            }
-        }
-
-        // Обновление статуса
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
-        }
-
-        // Очистка текста
-        function clearText() {
-            document.getElementById('output').value = '';
+        function clearBoth() {
+            finalTranscript = '';
+            currentSession = '';
+            document.getElementById('output1').value = '';
+            document.getElementById('output2').value = '';
             updateStatus('');
         }
 
-        // Очистка истории
-        function clearHistory() {
-            dialogHistory = [];
-            document.getElementById('chat').innerHTML = '';
-            localStorage.removeItem('dialogHistory');
+        function updateStatus(message) {
+            document.getElementById('status1').textContent = message;
+            document.getElementById('status2').textContent = message;
         }
 
-        // Добавление сообщения в чат
-        function addMessage(text, type) {
-            const chat = document.getElementById('chat');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}-message`;
-            
-            const textDiv = document.createElement('div');
-            textDiv.textContent = text;
-            
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'message-time';
-            timeDiv.textContent = new Date().toLocaleTimeString();
-            
-            messageDiv.appendChild(textDiv);
-            messageDiv.appendChild(timeDiv);
-            chat.appendChild(messageDiv);
-            chat.scrollTop = chat.scrollHeight;
-
-            // Сохраняем в историю
-            dialogHistory.push({ text, type, time: new Date().toISOString() });
-            saveHistory();
-        }
-
-        // Сохранение истории
-        function saveHistory() {
-            localStorage.setItem('dialogHistory', JSON.stringify(dialogHistory));
-        }
-
-        // Загрузка истории
-        function loadHistory() {
-            const saved = localStorage.getItem('dialogHistory');
-            if (saved) {
-                dialogHistory = JSON.parse(saved);
-                dialogHistory.forEach(msg => {
-                    const chat = document.getElementById('chat');
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = `message ${msg.type}-message`;
-                    
-                    const textDiv = document.createElement('div');
-                    textDiv.textContent = msg.text;
-                    
-                    const timeDiv = document.createElement('div');
-                    timeDiv.className = 'message-time';
-                    timeDiv.textContent = new Date(msg.time).toLocaleTimeString();
-                    
-                    messageDiv.appendChild(textDiv);
-                    messageDiv.appendChild(timeDiv);
-                    chat.appendChild(messageDiv);
-                });
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            const modal = document.getElementById('actionModal');
+            if (event.target === modal) {
+                closeActionModal();
             }
         }
 
-        // Отправка запроса к AI
-        async function sendToAI() {
-            const text = document.getElementById('output').value;
-            if (!text) return;
-
-            addMessage(text, 'user');
-            
-            const aiContainer = document.querySelector('.ai-container');
-            aiContainer.classList.add('loading');
-
-            try {
-                let response;
-                switch(currentModel) {
-                    case 'gigachat':
-                        response = await callGigaChat(text);
-                        break;
-                    case 'openassistant':
-                        response = await callOpenAssistant(text);
-                        break;
-                    case 'yandexgpt':
-                        response = await callYandexGPT(text);
-                        break;
-                    case 'gpt4all':
-                        response = await callGPT4All(text);
-                        break;
-                    case 'claude':
-                        response = await callClaude(text);
-                        break;
-                    default:
-                        throw new Error('Неизвестная модель');
-                }
-                addMessage(response, 'ai');
-            } catch (error) {
-                console.error('Error:', error);
-                addMessage(`Ошибка: ${error.message}`, 'error');
-            } finally {
-                aiContainer.classList.remove('loading');
-            }
-        }
-
-        // Функции вызова различных API
-        async function callGigaChat(text) {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: text
-                })
-            });
-
-            if (!response.ok) throw new Error(`GigaChat API Error: ${response.status}`);
-            const data = await response.json();
-            return data.response;
-        }
-
-        async function callYandexGPT(text) {
-            if (!API_KEYS.yandexgpt) throw new Error('Требуется API ключ для YandexGPT');
-            
-            const response = await fetch(API_ENDPOINTS.yandexgpt, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Api-Key ${API_KEYS.yandexgpt}`
-                },
-                body: JSON.stringify({
-                    modelUri: `gpt://yandexgpt-lite`,
-                    completionOptions: {
-                        stream: false,
-                        temperature: 0.6,
-                        maxTokens: "2000"
-                    },
-                    messages: [{ role: "user", text: text }]
-                })
-            });
-
-            if (!response.ok) throw new Error(`YandexGPT API Error: ${response.status}`);
-            const data = await response.json();
-            return data.result.alternatives[0].message.text;
-        }
-
-        async function callGPT4All(text) {
-            const response = await fetch(API_ENDPOINTS.gpt4all, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    messages: [{ role: "user", content: text }],
-                    temperature: 0.7,
-                    max_tokens: 1000
-                })
-            });
-
-            if (!response.ok) throw new Error(`GPT4All Error: ${response.status}`);
-            const data = await response.json();
-            return data.choices[0].message.content;
-        }
-
-        async function callClaude(text) {
-            if (!API_KEYS.claude) throw new Error('Требуется API ключ для Claude-2');
-            
-            const response = await fetch(API_ENDPOINTS.claude, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': API_KEYS.claude,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    messages: [{ role: "user", content: text }],
-                    model: "claude-2",
-                    max_tokens: 1000
-                })
-            });
-
-            if (!response.ok) throw new Error(`Claude API Error: ${response.status}`);
-            const data = await response.json();
-            return data.content[0].text;
-        }
-
-        async function callOpenAssistant(text) {
-            const response = await fetch(API_ENDPOINTS.openassistant, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    messages: [{ role: "user", content: text }]
-                })
-            });
-
-            if (!response.ok) throw new Error(`OpenAssistant Error: ${response.status}`);
-            const data = await response.json();
-            return data.choices[0].message.content;
-        }
-
-        // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             initRecognition();
-            loadHistory();
-            updateApiStatus();
+            
+            // Добавляем поддержку тач-событий
+            const commandsList = document.getElementById('commandsList');
+            
+            commandsList.addEventListener('touchstart', function(e) {
+                const target = e.target.closest('.command-item');
+                if (target) {
+                    target.draggable = true;
+                }
+            });
+            
+            commandsList.addEventListener('touchend', function(e) {
+                const target = e.target.closest('.command-item');
+                if (target) {
+                    target.draggable = false;
+                }
+            });
         });
     </script>
 </body>
