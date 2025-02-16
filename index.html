@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ассистент</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ... существующие стили ... */
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Левая часть - Распознавание речи -->
+        <div class="speech-container">
+            <h1>Распознавание речи</h1>
+            <textarea id="output" placeholder="Здесь появится распознанный текст..."></textarea>
+            <div class="buttons">
+                <button class="toggle" onclick="toggleRecognition()">🎤 Старт</button>
+                <button class="clear" onclick="clearText()">🗑️ Очистить</button>
+                <button class="send-button" onclick="sendToAI()">📤 Отправить</button>
+            </div>
+            <div class="status" id="status"></div>
+        </div>
+
+        <!-- Правая часть - AI ответы -->
+        <div class="ai-container">
+            <h1>AI Ассистент</h1>
+            <div class="settings-panel">
+                <div class="api-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Статус API: проверка...</span>
+                </div>
+                <select id="ai-model" onchange="changeModel()">
+                    <option value="gigachat">GigaChat (Сбер)</option>
+                    <option value="openassistant">OpenAssistant (Бесплатно)</option>
+                    <option value="yandexgpt">Yandex GPT</option>
+                    <option value="gpt4all">GPT4All (Локально)</option>
+                    <option value="claude">Claude-2</option>
+                </select>
+                <div class="api-key-input" style="display: none;">
+                    <input type="password" id="custom-api-key" placeholder="Введите API ключ">
+                    <button onclick="saveApiKey()">Сохранить ключ</button>
+                </div>
+            </div>
+            <div class="chat-container" id="chat"></div>
+            <div class="buttons">
+                <button class="clear" onclick="clearHistory()">🗑️ Очистить историю</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация переменных для распознавания речи
+        let recognition = null;
+        let isRecognizing = false;
+        
+        // API ключи
+        const API_KEYS = {
+            gigachat: localStorage.getItem('gigachat_key') || '',
+            yandexgpt: localStorage.getItem('yandex_key') || '',
+            claude: localStorage.getItem('claude_key') || '',
+            openassistant: 'public-free'
+        };
+
+        const API_ENDPOINTS = {
+            gigachat: '/api/chat',  // Изменено на локальный endpoint
+            yandexgpt: 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
+            claude: 'https://api.anthropic.com/v1/messages',
+            openassistant: 'https://api.openassistant.xyz/v1/chat',
+            gpt4all: 'http://localhost:4891/v1/chat/completions'
+        };
+
+        let currentModel = 'gigachat';  // Изменено на gigachat по умолчанию
+        let dialogHistory = [];
+
+        // Инициализация распознавания речи
+        function initRecognition() {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert('Ваш браузер не поддерживает распознавание речи. Используйте Chrome.');
+                return;
+            }
+
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'ru-RU';
+            
+            recognition.onstart = () => {
+                updateStatus('Распознавание запущено. Говорите...');
+                const toggleBtn = document.querySelector('.toggle');
+                toggleBtn.textContent = '🎤 Стоп';
+                toggleBtn.classList.add('active');
+                isRecognizing = true;
+            };
+            
+            recognition.onend = () => {
+                updateStatus('Распознавание остановлено');
+                const toggleBtn = document.querySelector('.toggle');
+                toggleBtn.textContent = '🎤 Старт';
+                toggleBtn.classList.remove('active');
+                isRecognizing = false;
+            };
+            
+            recognition.onerror = (event) => {
+                updateStatus('Ошибка: ' + event.error);
+                isRecognizing = false;
+                const toggleBtn = document.querySelector('.toggle');
+                toggleBtn.textContent = '🎤 Старт';
+                toggleBtn.classList.remove('active');
+            };
+            
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                const output = document.getElementById('output');
+                output.value = finalTranscript || interimTranscript;
+            };
+        }
+
+        // Функция переключения распознавания
+        function toggleRecognition() {
+            if (!recognition) initRecognition();
+            if (!recognition) return;
+            
+            if (!isRecognizing) {
+                recognition.start();
+            } else {
+                recognition.stop();
+                updateStatus('Распознавание остановлено');
+            }
+        }
+
+        // Функция изменения модели
+        function changeModel() {
+            currentModel = document.getElementById('ai-model').value;
+            const apiKeyInput = document.querySelector('.api-key-input');
+            
+            if (['yandexgpt', 'claude'].includes(currentModel)) {
+                apiKeyInput.style.display = 'block';
+            } else {
+                apiKeyInput.style.display = 'none';
+            }
+            
+            if (currentModel === 'gpt4all') {
+                checkGPT4AllServer();
+            }
+
+            updateApiStatus();
+        }
+
+        // Проверка статуса API
+        async function updateApiStatus() {
+            const statusDot = document.querySelector('.status-dot');
+            const statusText = document.querySelector('.status-text');
+            
+            try {
+                if (currentModel === 'gigachat' || currentModel === 'openassistant') {
+                    statusDot.className = 'status-dot active';
+                    statusText.textContent = 'Статус API: Доступен';
+                    return;
+                }
+
+                const hasKey = API_KEYS[currentModel] && API_KEYS[currentModel].length > 0;
+                if (!hasKey) {
+                    statusDot.className = 'status-dot error';
+                    statusText.textContent = 'Статус API: Требуется ключ';
+                    return;
+                }
+
+                const isValid = await validateApiKey(currentModel, API_KEYS[currentModel]);
+                statusDot.className = `status-dot ${isValid ? 'active' : 'error'}`;
+                statusText.textContent = `Статус API: ${isValid ? 'Доступен' : 'Ошибка'}`;
+            } catch (error) {
+                statusDot.className = 'status-dot error';
+                statusText.textContent = 'Статус API: Ошибка подключения';
+            }
+        }
+
+        // Валидация API ключей
+        async function validateApiKey(model, key) {
+            try {
+                let isValid = false;
+                switch(model) {
+                    case 'yandexgpt':
+                        const yandexResponse = await fetch(API_ENDPOINTS.yandexgpt, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Api-Key ${key}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                modelUri: "gpt://yandexgpt-lite",
+                                completionOptions: {
+                                    stream: false,
+                                    temperature: 0.6,
+                                    maxTokens: "1"
+                                },
+                                messages: [{ role: "user", text: "test" }]
+                            })
+                        });
+                        isValid = yandexResponse.ok;
+                        break;
+
+                    case 'claude':
+                        const claudeResponse = await fetch(API_ENDPOINTS.claude, {
+                            method: 'POST',
+                            headers: {
+                                'x-api-key': key,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                messages: [{ role: "user", content: "test" }],
+                                model: "claude-2",
+                                max_tokens: 1
+                            })
+                        });
+                        isValid = claudeResponse.ok;
+                        break;
+                }
+                return isValid;
+            } catch (error) {
+                console.error('Ошибка валидации ключа:', error);
+                return false;
+            }
+        }
+
+        // Сохранение API ключа
+        async function saveApiKey() {
+            const key = document.getElementById('custom-api-key').value;
+            if (!key) {
+                alert('Введите API ключ');
+                return;
+            }
+
+            const isValid = await validateApiKey(currentModel, key);
+            if (isValid) {
+                localStorage.setItem(`${currentModel}_key`, key);
+                API_KEYS[currentModel] = key;
+                alert('API ключ успешно сохранен и проверен!');
+                updateApiStatus();
+            } else {
+                alert('Неверный API ключ или ошибка проверки');
+            }
+        }
+
+        // Проверка локального сервера GPT4All
+        async function checkGPT4AllServer() {
+            try {
+                const response = await fetch('http://localhost:4891/health');
+                if (!response.ok) throw new Error('GPT4All сервер недоступен');
+                updateStatus('GPT4All сервер доступен');
+            } catch (error) {
+                updateStatus('Ошибка: GPT4All сервер не запущен. Запустите локальный сервер.');
+            }
+        }
+
+        // Обновление статуса
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        // Очистка текста
+        function clearText() {
+            document.getElementById('output').value = '';
+            updateStatus('');
+        }
+
+        // Очистка истории
+        function clearHistory() {
+            dialogHistory = [];
+            document.getElementById('chat').innerHTML = '';
+            localStorage.removeItem('dialogHistory');
+        }
+
+        // Добавление сообщения в чат
+        function addMessage(text, type) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            const textDiv = document.createElement('div');
+            textDiv.textContent = text;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            
+            messageDiv.appendChild(textDiv);
+            messageDiv.appendChild(timeDiv);
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+
+            // Сохраняем в историю
+            dialogHistory.push({ text, type, time: new Date().toISOString() });
+            saveHistory();
+        }
+
+        // Сохранение истории
+        function saveHistory() {
+            localStorage.setItem('dialogHistory', JSON.stringify(dialogHistory));
+        }
+
+        // Загрузка истории
+        function loadHistory() {
+            const saved = localStorage.getItem('dialogHistory');
+            if (saved) {
+                dialogHistory = JSON.parse(saved);
+                dialogHistory.forEach(msg => {
+                    const chat = document.getElementById('chat');
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.type}-message`;
+                    
+                    const textDiv = document.createElement('div');
+                    textDiv.textContent = msg.text;
+                    
+                    const timeDiv = document.createElement('div');
+                    timeDiv.className = 'message-time';
+                    timeDiv.textContent = new Date(msg.time).toLocaleTimeString();
+                    
+                    messageDiv.appendChild(textDiv);
+                    messageDiv.appendChild(timeDiv);
+                    chat.appendChild(messageDiv);
+                });
+            }
+        }
+
+        // Отправка запроса к AI
+        async function sendToAI() {
+            const text = document.getElementById('output').value;
+            if (!text) return;
+
+            addMessage(text, 'user');
+            
+            const aiContainer = document.querySelector('.ai-container');
+            aiContainer.classList.add('loading');
+
+            try {
+                let response;
+                switch(currentModel) {
+                    case 'gigachat':
+                        response = await callGigaChat(text);
+                        break;
+                    case 'openassistant':
+                        response = await callOpenAssistant(text);
+                        break;
+                    case 'yandexgpt':
+                        response = await callYandexGPT(text);
+                        break;
+                    case 'gpt4all':
+                        response = await callGPT4All(text);
+                        break;
+                    case 'claude':
+                        response = await callClaude(text);
+                        break;
+                    default:
+                        throw new Error('Неизвестная модель');
+                }
+                addMessage(response, 'ai');
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage(`Ошибка: ${error.message}`, 'error');
+            } finally {
+                aiContainer.classList.remove('loading');
+            }
+        }
+
+        // Функции вызова различных API
+        async function callGigaChat(text) {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: text
+                })
+            });
+
+            if (!response.ok) throw new Error(`GigaChat API Error: ${response.status}`);
+            const data = await response.json();
+            return data.response;
+        }
+
+        async function callYandexGPT(text) {
+            if (!API_KEYS.yandexgpt) throw new Error('Требуется API ключ для YandexGPT');
+            
+            const response = await fetch(API_ENDPOINTS.yandexgpt, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Api-Key ${API_KEYS.yandexgpt}`
+                },
+                body: JSON.stringify({
+                    modelUri: `gpt://yandexgpt-lite`,
+                    completionOptions: {
+                        stream: false,
+                        temperature: 0.6,
+                        maxTokens: "2000"
+                    },
+                    messages: [{ role: "user", text: text }]
+                })
+            });
+
+            if (!response.ok) throw new Error(`YandexGPT API Error: ${response.status}`);
+            const data = await response.json();
+            return data.result.alternatives[0].message.text;
+        }
+
+        async function callGPT4All(text) {
+            const response = await fetch(API_ENDPOINTS.gpt4all, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: [{ role: "user", content: text }],
+                    temperature: 0.7,
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) throw new Error(`GPT4All Error: ${response.status}`);
+            const data = await response.json();
+            return data.choices[0].message.content;
+        }
+
+        async function callClaude(text) {
+            if (!API_KEYS.claude) throw new Error('Требуется API ключ для Claude-2');
+            
+            const response = await fetch(API_ENDPOINTS.claude, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': API_KEYS.claude,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    messages: [{ role: "user", content: text }],
+                    model: "claude-2",
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) throw new Error(`Claude API Error: ${response.status}`);
+            const data = await response.json();
+            return data.content[0].text;
+        }
+
+        async function callOpenAssistant(text) {
+            const response = await fetch(API_ENDPOINTS.openassistant, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: [{ role: "user", content: text }]
+                })
+            });
+
+            if (!response.ok) throw new Error(`OpenAssistant Error: ${response.status}`);
+            const data = await response.json();
+            return data.choices[0].message.content;
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            initRecognition();
+            loadHistory();
+            updateApiStatus();
+        });
+    </script>
+</body>
+</html>
